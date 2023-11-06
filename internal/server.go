@@ -8,4 +8,6 @@ func SetRouters(router *gin.Engine) {
 	router.GET("api/getListenAgainSongs", ListenAgainSongs)
 	router.GET("api/songs/image/:filename", GetImageSong)
 	router.GET("streamSong/:filename", StreamSong)
+	router.GET("api/findSong/:findStr", FindSong)
+
 }
