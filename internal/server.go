@@ -9,5 +9,5 @@ func SetRouters(router *gin.Engine) {
 	router.GET("api/songs/image/:filename", GetImageSong)
 	router.GET("streamSong/:filename", StreamSong)
 	router.GET("api/findSong/:findStr", FindSong)
-
+	router.GET("ws/:roomId", handleConnections)
 }
