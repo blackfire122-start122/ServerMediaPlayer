@@ -1,10 +1,12 @@
 package internal
 
 import (
+	. "SongServer/pkg"
 	"fmt"
 	"github.com/gin-gonic/gin"
 	"github.com/gorilla/websocket"
 	"net/http"
+	"strconv"
 	"time"
 )
 
@@ -16,6 +18,7 @@ type Message struct {
 type Client struct {
 	Conn   *websocket.Conn
 	RoomId string
+	User   User
 }
 
 var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
@@ -87,18 +90,22 @@ func handleConnections(c *gin.Context) {
 	}
 }
 
-type clientsRequest struct {
-	RoomId string `json:"roomId"`
-}
+func GetOnlineUsers() []map[string]string {
+	resp := make([]map[string]string, len(clients))
 
-func GetOnlineUsers() []clientsRequest {
-	var onlineClients []clientsRequest
+	for client := range clients {
+		item := make(map[string]string)
 
-	for client, _ := range clients {
-		onlineClients = append(onlineClients, clientsRequest{RoomId: client.RoomId})
+		item["id"] = strconv.FormatUint(client.User.Id, 10)
+		item["username"] = client.User.Username
+		item["image"] = client.User.Image
+		item["email"] = client.User.Email
+		item["phone"] = client.User.Phone
+
+		resp = append(resp, item)
 	}
 
-	return onlineClients
+	return resp
 }
 
 func sendPing(conn *websocket.Conn) {
