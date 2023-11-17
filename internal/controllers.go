@@ -2,13 +2,24 @@ package internal
 
 import (
 	. "SongServer/pkg"
+	"encoding/json"
 	"github.com/gin-gonic/gin"
+	"io"
 	"net/http"
 	"strconv"
 	"strings"
 )
 
 func ListenAgainSongs(c *gin.Context) {
+	loginUser, _ := CheckSessionUser(c.Request)
+
+	if !loginUser {
+		c.Writer.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// ToDo: need create system for answer againSongs
+
 	var songs []Song
 
 	if err := DB.Limit(20).Find(&songs).Error; err != nil {
@@ -31,6 +42,15 @@ func ListenAgainSongs(c *gin.Context) {
 }
 
 func getTopsSongs(c *gin.Context) {
+	loginUser, _ := CheckSessionUser(c.Request)
+
+	if !loginUser {
+		c.Writer.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
+	// ToDo: need create system for answer top songs
+
 	var songs []Song
 
 	if err := DB.Limit(20).Find(&songs).Error; err != nil {
@@ -66,6 +86,13 @@ func StreamSong(c *gin.Context) {
 }
 
 func FindSong(c *gin.Context) {
+	loginUser, _ := CheckSessionUser(c.Request)
+
+	if !loginUser {
+		c.Writer.WriteHeader(http.StatusUnauthorized)
+		return
+	}
+
 	var songs []Song
 
 	if err := DB.Where("lower(Name) LIKE ?", "%"+strings.ToLower(c.Param("findStr"))+"%").Limit(20).Find(&songs).Error; err != nil {
@@ -88,10 +115,10 @@ func FindSong(c *gin.Context) {
 }
 
 func GetUser(c *gin.Context) {
-	var user User
+	loginUser, user := CheckSessionUser(c.Request)
 
-	if err := DB.First(&user).Error; err != nil {
-		c.Writer.WriteHeader(http.StatusBadRequest)
+	if !loginUser {
+		c.Writer.WriteHeader(http.StatusUnauthorized)
 		return
 	}
 
@@ -103,4 +130,65 @@ func GetUser(c *gin.Context) {
 	resp["phone"] = user.Phone
 
 	c.JSON(http.StatusOK, resp)
+}
+
+func RegisterUser(c *gin.Context) {
+	resp := make(map[string]string)
+
+	var user UserRegister
+	bodyBytes, _ := io.ReadAll(c.Request.Body)
+
+	if err := json.Unmarshal(bodyBytes, &user); err != nil {
+		c.Writer.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if user.Password == "" || user.Username == "" {
+		resp["Register"] = "Not all field"
+
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	if err := Sign(&user); err != nil {
+		resp["Register"] = "Error create user"
+
+		c.JSON(http.StatusBadRequest, resp)
+		return
+	}
+
+	resp["Register"] = "OK"
+	c.JSON(http.StatusOK, resp)
+}
+
+func LoginUser(c *gin.Context) {
+	resp := make(map[string]string)
+
+	var user UserLogin
+	bodyBytes, _ := io.ReadAll(c.Request.Body)
+
+	if err := json.Unmarshal(bodyBytes, &user); err != nil {
+		c.Writer.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if Login(c.Writer, c.Request, &user) {
+		resp["Login"] = "OK"
+		c.JSON(http.StatusOK, resp)
+	} else {
+		resp["Login"] = "error login user"
+		c.JSON(http.StatusForbidden, resp)
+	}
+}
+
+func LogoutUser(c *gin.Context) {
+	resp := make(map[string]string)
+
+	if Logout(c.Writer, c.Request) {
+		resp["Logout"] = "OK"
+		c.JSON(http.StatusOK, resp)
+	} else {
+		resp["Logout"] = "error logout user"
+		c.JSON(http.StatusInternalServerError, resp)
+	}
 }

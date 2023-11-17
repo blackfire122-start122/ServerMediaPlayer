@@ -27,6 +27,7 @@ var upgrader = websocket.Upgrader{CheckOrigin: func(r *http.Request) bool {
 }
 
 var clients = make(map[Client]bool)
+var groups = make(map[string][]Client)
 
 func handleConnections(c *gin.Context) {
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -44,7 +45,11 @@ func handleConnections(c *gin.Context) {
 		return
 	}
 
-	client := Client{Conn: conn, RoomId: roomId}
+	var user User
+
+	DB.First(&user)
+
+	client := Client{Conn: conn, RoomId: roomId, User: user}
 	clients[client] = true
 
 	go sendPing(conn)
@@ -55,6 +60,10 @@ func handleConnections(c *gin.Context) {
 			fmt.Println("read ", err)
 			delete(clients, client)
 			return
+		}
+
+		if messageType == websocket.PongMessage {
+			fmt.Println("answer on ping")
 		}
 
 		if messageType == websocket.TextMessage {
@@ -76,22 +85,54 @@ func handleConnections(c *gin.Context) {
 					delete(clients, client)
 					return
 				}
-			} else if msg.Type == "play" || msg.Type == "pause" {
+			} else if msg.Type == "connectToUser" {
 				for client := range clients {
-					err := client.Conn.WriteJSON(msg)
-					if err != nil {
-						fmt.Println("convert json error ", err)
+					contentStr, ok := msg.Content.(string)
+					if !ok {
+						fmt.Println("Conversion to string failed")
 						delete(clients, client)
 						return
 					}
+
+					var id, err = strconv.ParseUint(contentStr, 10, 64)
+
+					if err != nil {
+						fmt.Println("converting error ", err)
+						delete(clients, client)
+						return
+					}
+
+					if client.User.Id == id {
+						err := client.Conn.WriteJSON(msg)
+
+						if err != nil {
+							fmt.Println("send msg error ", err)
+							delete(clients, client)
+							return
+						}
+						break
+					}
 				}
 			}
+			//else if msg.Type == "play" || msg.Type == "pause" {
+			//	for client := range clients {
+			//		if client.User.Id == msg.Content.Id{
+			//			err := client.Conn.WriteJSON(msg)
+			//			if err != nil {
+			//				fmt.Println("send msg error ", err)
+			//				delete(clients, client)
+			//				return
+			//			}
+			//			break
+			//		}
+			//	}
+			//}
 		}
 	}
 }
 
 func GetOnlineUsers() []map[string]string {
-	resp := make([]map[string]string, len(clients))
+	resp := make([]map[string]string, 0)
 
 	for client := range clients {
 		item := make(map[string]string)
@@ -109,11 +150,12 @@ func GetOnlineUsers() []map[string]string {
 }
 
 func sendPing(conn *websocket.Conn) {
-	ticker := time.NewTicker(30 * time.Second)
+	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
 
 	for range ticker.C {
 		if err := conn.WriteMessage(websocket.PingMessage, []byte("ping")); err != nil {
+			fmt.Println("error send ping")
 			break
 		}
 	}
